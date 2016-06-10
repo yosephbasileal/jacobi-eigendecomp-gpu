@@ -43,7 +43,7 @@ int eye(float* A, int size) {
 	}
 }
 
-// Make all non diagonal elements 0 
+// Make all non diagonal elements 0
 void remove_nondiag(float* A, int size) {
 	for(int i = 0; i < size; i++) {
 		for(int j = 0; j < size; j++) {
@@ -59,11 +59,11 @@ bool is_symmetric(float* A, int size) {
 	for(int i = 0; i < size - 1; i++) {
 		for(int j = i + 1; j < size; j++) {
 			if(A[i * size + j] != A[j * size + i]) {
-				return false;
+							return false;
 			}
 		}
 	}
-	
+
 	return true;
 }
 
@@ -72,8 +72,8 @@ float square(float num) {
 	return num * num;
 }
 
-// Calculates the square root of sum of squares of 
-//	all off diagonal elements of A
+// Calculates the square root of sum of squares of
+//      all off diagonal elements of A
 float off(float* A, int size) {
 	float sum = 0;
 	for(int i = 0; i < size - 1; i++) {
@@ -95,37 +95,37 @@ float index(float* A, int size, int row, int col) {
 void index_m(float* A, int size, int row, int col, float new_val) {
 	A[row * size + col] = new_val;
 }
+
 // Cacluates values of c and s for a given pivot of rotation (i,j)
 void jacobi_cs(float* A, int size, int i, int j, float* c, float* s) {
 	// calculate T
 	float T = (index(A,size,j,j) - index(A,size,i,i)) / (2 * index(A,size,i,j));
- 
+
 	// equation: t^2 + 2Tt - 1 = 0
 	// chose the root that is smaller in absolute value
 	float t;
- 	if(T >= 0) {
- 		t = -T + sqrt(1.0 + square(T));
- 	} else {
-  		t = -T - sqrt(1.0 + square(T));
-   }
+	if(T >= 0) {
+		t = -T + sqrt(1.0 + square(T));
+	} else {
+		t = -T - sqrt(1.0 + square(T));
+	}
 
 	// calculate c and s
 	*c = 1.0 / (sqrt(1.0 + square(t)));
-   *s = *c * t;
+	*s = *c * t;
 }
 
 
-// Jacobi method	
+// Jacobi method
 void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 	// initialize D and E
 	copy(A, D, size);
 	eye(E, size);
-	
+
 	while(off(D,size) > epsilon) {
 		// execute a cycle of n(n-1)/2 rotations
 		for(int i = 0; i < size - 1; i++) {
 			for(int j = i + 1; j < size; j++) {
-				
 				// Calculate values of c and s
 				float c, s;
 				jacobi_cs(D, size, i, j, &c, &s);
@@ -137,11 +137,11 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 				index_m(R,size,j,j,c);
 				index_m(R,size,j,i,s);
 				index_m(R,size,i,j,-s);
-				
+
 				if(debug) {
-					printf("Zeroed out element D(%d,%d)\n",i,j);
+								printf("Zeroed out element D(%d,%d)\n",i,j);
 				}
-	
+
 				// Do rotation
 				float* result = (float *) malloc(sizeof(float) * size * size);
 
@@ -149,13 +149,12 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 				float alpha = 1.0;
 				float beta = 0.0;
 
-				
 				// Calculate D = R * D * R'
 				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                        size, size, size, 1.0, R, size, D, size, 0, result, size);
+                    size, size, size, 1.0, R, size, D, size, 0, result, size);
 				copy(result,D,size);
 				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, \
-                        size, size, size, 1.0, D, size, R, size, 0, result, size);
+                    size, size, size, 1.0, D, size, R, size, 0, result, size);
 				copy(result,D,size);
 
 				if(debug) {
@@ -166,32 +165,29 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 
 				// Cacluate E = E * R
 				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                        size, size, size, 1.0, E, size, R, size, 0, result, size);
-            copy(result,E,size);
-
+                    size, size, size, 1.0, E, size, R, size, 0, result, size);
+				copy(result,E,size);
 			}
 		}
-		//break;
 	}
-
 }
 
 
 int main(int argc, char** argv) {
-
 	int r;
-    //check command line arguments
-    while ((r = getopt(argc, argv, "d")) != -1) {
-      switch(r)
-      {
-        case 'd':
-          debug = true;
-          break;
-        default:
-          //printUsage();
-          exit(1);
-      }
+	//check command line arguments
+	while ((r = getopt(argc, argv, "d")) != -1) {
+		switch(r)
+		{
+			case 'd':
+				debug = true;
+				break;
+			default:
+				//printUsage();
+				exit(1);
+		}
 	}
+
 	// initialize array
 	int size = 6;
 	float* A = (float*) malloc(sizeof(float) * size * size);
@@ -204,6 +200,7 @@ int main(int argc, char** argv) {
 			scanf("%f", &A[i * size + j]);
 		}
 	}
+	
 	if(debug) {
 		printf("Input matrix A: \n");
 		print(A, size);
@@ -227,3 +224,4 @@ int main(int argc, char** argv) {
 
 	return 0;
 }
+

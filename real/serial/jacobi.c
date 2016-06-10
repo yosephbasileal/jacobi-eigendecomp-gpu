@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <getopt.h>
 #include <stdbool.h>
 #include <lapacke.h>
 #include <cblas.h>
 
+bool debug = false;
 
 // Needed compile flags: -llapacke -lblas -lm
 
@@ -12,7 +14,7 @@
 int print(float* A, int size) {
 	for(int i = 0; i < size; i++) {
 		for(int j = 0; j < size; j++) {
-			printf("%f  ",A [i * size + j]);
+			printf("%4.4f  ",A [i * size + j]);
 		}
 		printf("\n");
 	}
@@ -36,6 +38,17 @@ int eye(float* A, int size) {
 			} else {
 				A[i * size + j] = 0.0;
 				A[j * size + i] = 0.0;
+			}
+		}
+	}
+}
+
+// Make all non diagonal elements 0 
+void remove_nondiag(float* A, int size) {
+	for(int i = 0; i < size; i++) {
+		for(int j = 0; j < size; j++) {
+			if(i != j) {
+				A[i * size + j] = 0.0;
 			}
 		}
 	}
@@ -110,44 +123,75 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 	
 	while(off(D,size) > epsilon) {
 		// execute a cycle of n(n-1)/2 rotations
-		for(int i = 0; i < size/2 - 1; i++) {
-			for(int j = i + 1; j < size/2; j++) {
+		for(int i = 0; i < size - 1; i++) {
+			for(int j = i + 1; j < size; j++) {
 				
-				// calculate values of c and s
+				// Calculate values of c and s
 				float c, s;
-				jacobi_cs(A, size, i, j, &c, &s);
+				jacobi_cs(D, size, i, j, &c, &s);
 
-				// setup rotation matrix
+				// Setup rotation matrix
 				float * R = (float *) malloc(sizeof(float) * size * size);
 				eye(R, size);
 				index_m(R,size,i,i,c);
 				index_m(R,size,j,j,c);
 				index_m(R,size,j,i,s);
 				index_m(R,size,i,j,-s);
-				printf("i: %d  j: %d \n",i,j);
-				print(R,size);	
-				// do rotation
-				float* result = (float *) malloc(sizeof(float) * size * size);
-				cblas_sgemm(CblasRowMajor,CblasTrans,CblasNoTrans,size,size,size,1.0,R,size,D,size,1.0,result,size);
-				copy(result,D,size);
 				
-				print(R,size);
-				print(D,size);
-				printf("\n");
+				if(debug) {
+					printf("Zeroed out element D(%d,%d)\n",i,j);
+				}
+	
+				// Do rotation
+				float* result = (float *) malloc(sizeof(float) * size * size);
 
+				// sgemm calculates C = alpha*A*B + beta*C
+				float alpha = 1.0;
+				float beta = 0.0;
 
-				cblas_sgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,size,size,size, 1.0,D,size,R,size,1.0,result,size);
+				
+				// Calculate D = R * D * R'
+				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
+                        size, size, size, 1.0, R, size, D, size, 0, result, size);
+				copy(result,D,size);
+				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, \
+                        size, size, size, 1.0, D, size, R, size, 0, result, size);
 				copy(result,D,size);
 
-				print(D,size);
-				printf("\n");
+				if(debug) {
+					printf("New transformed matrix D:\n");
+					print(D,size);
+					printf("\n");
+				}
+
+				// Cacluate E = E * R
+				cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
+                        size, size, size, 1.0, E, size, R, size, 0, result, size);
+            copy(result,E,size);
+
 			}
 		}
-		break;
+		//break;
 	}
 
 }
-int main() {
+
+
+int main(int argc, char** argv) {
+
+	int r;
+    //check command line arguments
+    while ((r = getopt(argc, argv, "d")) != -1) {
+      switch(r)
+      {
+        case 'd':
+          debug = true;
+          break;
+        default:
+          //printUsage();
+          exit(1);
+      }
+	}
 	// initialize array
 	int size = 6;
 	float* A = (float*) malloc(sizeof(float) * size * size);
@@ -160,14 +204,26 @@ int main() {
 			scanf("%f", &A[i * size + j]);
 		}
 	}
-	print(A, size);
-	printf("\n");
+	if(debug) {
+		printf("Input matrix A: \n");
+		print(A, size);
+		printf("\n");
+	}
 
-	float epsilon = 0.01;	
+	// desired accuracy
+	float epsilon = 0.01;
+
 	jacobi(A, D, E, size, epsilon);
+	remove_nondiag(D, size);
+
+	printf("\n");
+	printf("______Results______\n");
+	printf("Eigenvalues on the diagonal:\n");
+	print(D, size);
+	printf("\n");
+	printf("Corresponding eigenvectors:\n");
+	print(E, size);
+	printf("\n");
 
 	return 0;
 }
-
-
-

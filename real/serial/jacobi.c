@@ -12,6 +12,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <cblas.h>
+#include <lapacke.h>
 
 bool debug = false; // -d command line option for verbose output
 
@@ -19,10 +20,19 @@ bool debug = false; // -d command line option for verbose output
 void print(float* A, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = 0; j < size; j++) {
-         printf("%.4f  ",A [i*size +j]);
+         printf("%.4f  ", A[i*size+j]);
       }
       printf("\n");
    }
+}
+
+void print2(float* A, int row, int col) {
+	for(int i = 0; i < row; i++) {
+		for(int j = 0; j < col; j++) {
+			printf("%.4f  ", A[i*col+j]);
+		}
+		printf("\n");
+	}
 }
 
 // Copies matrix elements 'from' to 'to'
@@ -90,6 +100,39 @@ float off(float* A, int size) {
    return sqrt(sum);
 }
 
+// Given pivot(i,j), constructs a submatrix of rows affected J'*A
+void create_sub_row(float* A, int size, int i, int j, float* A_sub) {
+   for(int k = 0; k < size; k++) {
+      A_sub[0 * size + k] = A[i * size + k];
+      A_sub[1 * size + k] = A[j * size + k];
+   }
+}
+
+// Given pivot(i,j), constructs a submatrix of row affected by A*J
+void create_sub_col(float* A, int size, int i, int j, float* A_sub) {
+   for(int k = 0; k < size; k++) {
+      A_sub[k * size + 0] = A[k * size + i];
+      A_sub[k * size + 1] = A[k * size + j];
+   }
+}
+
+// Updates the original matrix's rows with changes made to submatrix
+void update_sub_row(float* A, int size, int i, int j, float* A_sub) {
+   for(int k = 0; k < size; k++) {
+      A[i * size + k] = A_sub[0 * size + k];
+      A[j * size + k] = A_sub[1 * size + k];
+   }
+}
+
+// Updates the original matrix's cols with changes made to submatrix
+void update_sub_col(float* A, int size, int i, int j, float* A_sub) {
+   for(int k = 0; k < size; k++) {
+      A[k * size + i] = A_sub[k * size + 0];
+      A[k * size + j] = A_sub[k * size + 1];
+   }
+}
+
+
 // Cacluates values of c and s for a given pivot of rotation (i,j)
 void jacobi_cs(float* A, int size, int i, int j, float* c, float* s) {
    // calculate T
@@ -116,6 +159,12 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
    copy(A, D, size);
    eye(E, size);
 
+	// Submatrices (2xn or nx2 size) for storing intermediate results
+	float* D_sub = (float *) malloc(sizeof(float) * 2 * size);
+	float* E_sub = (float *) malloc(sizeof(float) * 2 * size);
+	float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
+
+
    while(off(D,size) > epsilon) {
       // execute a cycle of n(n-1)/2 rotations
       for(int i = 0; i < size - 1; i++) {
@@ -125,31 +174,35 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
             jacobi_cs(D, size, i, j, &c, &s);
 
             // setup rotation matrix
-            float * R = (float *) malloc(sizeof(float) * size * size);
-            eye(R, size);
-            R[i*size+i] = c;
-            R[j*size+j] = c;
-            R[j*size+i] = s;
-            R[i*size+j] = -s;
+            float R[] = {c, s, -s, c};
 
             if(debug) {
                printf("Zeroed out element D(%d,%d)\n",i,j);
             }
 
-            // do rotation
-            float* result = (float *) malloc(sizeof(float) * size * size);
+            // get submatrix of rows of D that will be affected by R' * D
+            create_sub_row(D, size, i, j, D_sub);
 
             // sgemm calculates C = alpha*A*B + beta*C
             float alpha = 1.0;
             float beta = 0.0;
 
-            // calculate D = R * D * R'
+            // calculate X_sub = R' * D_sub
+            cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, \
+                    2, size, 2, alpha, R, 2, D_sub, size, beta, X_sub, size);
+
+				// update D
+            update_sub_row(D,size,i,j,X_sub);
+
+				// get submatrix of cols of D that will be affected by D * R
+            create_sub_col(D,size,i,j,D_sub);
+
+				// calculate X_sub = D_sub * R
             cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                    size, size, size, alpha, R, size, D, size, beta, result, size);
-            copy(result,D,size);
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, \
-                    size, size, size, alpha, D, size, R, size, beta, result, size);
-            copy(result,D,size);
+                    size, 2, 2, alpha, D_sub, size, R, 2, beta, X_sub, size);
+
+				// update D
+            update_sub_col(D,size,i,j,X_sub);
 
             if(debug) {
                printf("New transformed matrix D:\n");
@@ -157,10 +210,15 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
                printf("\n");
             }
 
-            // Cacluate E = E * R
+            // get submatrix of cols of E that iwll be affected by E * R
+				create_sub_col(E,size,i,j,E_sub);
+
+				// calculate X_sub = E_sub * R
             cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                    size, size, size, 1.0, E, size, R, size, 0, result, size);
-            copy(result,E,size);
+                    size, 2, 2, alpha, E_sub, size, R, 2, beta, X_sub, size);
+            
+				// update E
+				update_sub_col(E,size,i,j,X_sub);
          }
       }
    }

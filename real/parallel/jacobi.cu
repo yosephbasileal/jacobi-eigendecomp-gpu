@@ -90,6 +90,32 @@ float off(float* A, int size) {
    return sqrt(sum);
 }
 
+// Initalizes arrays for chess tournament ordering
+void chess_initialize(int* order1, int* order2, int size) {
+   for(int i = 1; i <= size/2; i++) {
+      order1[i-1] = i;
+      order2[i-1] = i + size/2;
+   }
+}
+
+// Do one permutation of chess tournament ordering
+void chess_permute(int* order1, int* order2, int size) {
+   // save the first element of array 2
+   int temp = order2[0];
+   // shift everthing in array 2 to the left
+   for(int i = 0; i < size - 1; i++) {
+      order2[i] = order2[i+1];
+   }
+   // put last element of array 1 as last element array 2
+   order2[size/2-1] = order1[size/2-1];
+   // shift everything but the first two of array 1 to the right
+   for(int i = size - 1; i >= 2; i--) {
+      order1[i] = order1[i-1];
+   }
+   // put first element of array 2 as second element of array 1
+   order1[1] = temp;
+}
+
 // Cacluates values of c and s for a given pivot of rotation (i,j)
 void jacobi_cs(float* A, int size, int i, int j, float* c, float* s) {
    // calculate T

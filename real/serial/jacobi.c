@@ -12,7 +12,6 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <cblas.h>
-#include <lapacke.h>
 
 bool debug = false; // -d command line option for verbose output
 
@@ -26,6 +25,7 @@ void print(float* A, int size) {
    }
 }
 
+// Prints a non-square matrix to stdout
 void print2(float* A, int row, int col) {
 	for(int i = 0; i < row; i++) {
 		for(int j = 0; j < col; j++) {
@@ -111,8 +111,8 @@ void create_sub_row(float* A, int size, int i, int j, float* A_sub) {
 // Given pivot(i,j), constructs a submatrix of row affected by A*J
 void create_sub_col(float* A, int size, int i, int j, float* A_sub) {
    for(int k = 0; k < size; k++) {
-      A_sub[k * size + 0] = A[k * size + i];
-      A_sub[k * size + 1] = A[k * size + j];
+      A_sub[k * 2 + 0] = A[k * size + i];
+      A_sub[k * 2 + 1] = A[k * size + j];
    }
 }
 
@@ -127,9 +127,42 @@ void update_sub_row(float* A, int size, int i, int j, float* A_sub) {
 // Updates the original matrix's cols with changes made to submatrix
 void update_sub_col(float* A, int size, int i, int j, float* A_sub) {
    for(int k = 0; k < size; k++) {
-      A[k * size + i] = A_sub[k * size + 0];
-      A[k * size + j] = A_sub[k * size + 1];
+      A[k * size + i] = A_sub[k * 2 + 0];
+      A[k * size + j] = A_sub[k * 2 + 1];
    }
+}
+
+// Initalizes arrays for chess tournament ordering
+void chess_initialize2(int* order1, int* order2, int size) {
+   int curr = -1;
+   for(int i = 0; i < size; i++) {
+      order1[i] = ++curr;
+      order2[i] = ++curr;
+   }
+}
+
+// Do one permutation of chess tournament ordering
+void chess_permute(int* order1, int* order2, int size) {
+   // save the first element of array 2
+   int temp = order2[0];
+   // shift everthing in array 2 to the left
+   for(int i = 0; i <= size - 2; i++) {
+      order2[i] = order2[i+1];
+   }
+   // put last element of array 1 as last element array 2
+   order2[size-1] = order1[size-1];
+   // shift everything but the first two of array 1 to the right
+   for(int i = size - 1; i >= 2; i--) {
+      order1[i] = order1[i-1];
+   }
+   // put first element of array 2 as second element of array 1
+   order1[1] = temp;
+}
+
+void swap(int* num1, int* num2) {
+   int temp = *num1;
+   *num1 = *num2;
+   *num2 = temp;
 }
 
 
@@ -153,6 +186,21 @@ void jacobi_cs(float* A, int size, int i, int j, float* c, float* s) {
 }
 
 
+void mul_mat(int m,int n,int k, float* a,float* b, float* c)
+{
+    int i,j,h;
+    for(i = 0; i < m; i++)
+    {
+        for(j = 0; j < n; j++)
+        {
+             c[i * n + j] = 0;
+             for(h = 0; h< k; h++)
+               c[i * n + j] += + a[i * k + h] * b[h * n + j];
+        }
+    }
+}
+
+
 // Jacobi method
 void jacobi(float* A, float* D, float* E, int size, float epsilon) {
    // initialize D and E
@@ -165,16 +213,28 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 	float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
 
 
+	
+	int* arr1 = (int *) malloc(sizeof(int) * size/2);
+	int* arr2 = (int *) malloc(sizeof(int) * size/2);
+
    while(off(D,size) > epsilon) {
       // execute a cycle of n(n-1)/2 rotations
-      for(int i = 0; i < size - 1; i++) {
-         for(int j = i + 1; j < size; j++) {
+      //for(int i = 0; i < size - 1; i++) {
+         //for(int j = i + 1; j < size; j++) {
+			chess_initialize2(arr1,arr2,size/2);
+		for(int h = 0; h < size-1; h++) {	
+			for(int k = 0; k < size/2; k++) {
+				int i = arr1[k];
+				int j = arr2[k];
+				if(i > j) swap(&i,&j);
             // calculate values of c and s
             float c, s;
             jacobi_cs(D, size, i, j, &c, &s);
 
             // setup rotation matrix
             float R[] = {c, s, -s, c};
+				
+				float R_t[] = {c, -s, s, c};
 
             if(debug) {
                printf("Zeroed out element D(%d,%d)\n",i,j);
@@ -188,39 +248,68 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
             float beta = 0.0;
 
             // calculate X_sub = R' * D_sub
-            cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, \
+            //cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, \
                     2, size, 2, alpha, R, 2, D_sub, size, beta, X_sub, size);
+			
+            printf("before: \n");
+            print(D,size); printf("\n");
+            print2(D_sub,2,size);
 
+	
+				mul_mat(2,size,2,R_t,D_sub,X_sub);
+				
 				// update D
             update_sub_row(D,size,i,j,X_sub);
 
-				// get submatrix of cols of D that will be affected by D * R
+				printf("after \n");
+            print2(X_sub,  2,size); printf("\n");
+
+            print(D,size);printf("\n");
+            // get submatrix of cols of D that will be affected by D * R
             create_sub_col(D,size,i,j,D_sub);
 
-				// calculate X_sub = D_sub * R
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
+            // calculate X_sub = D_sub * R
+            //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
                     size, 2, 2, alpha, D_sub, size, R, 2, beta, X_sub, size);
 
-				// update D
+            //printf("before: \n");
+            //print(D,size); printf("\n");
+            //print2(D_sub,size,2);
+
+             mul_mat(size,2,2,D_sub,R,X_sub);
+
+            //printf("after \n");
+            //print2(X_sub, size, 2); printf("\n");
+            // update D
             update_sub_col(D,size,i,j,X_sub);
 
+            //print(D,size);printf("\n");
+
             if(debug) {
-               printf("New transformed matrix D:\n");
-               print(D,size);
-               printf("\n");
+               //printf("New transformed matrix D:\n");
+               //print(D,size);
+               //printf("\n");
             }
 
             // get submatrix of cols of E that iwll be affected by E * R
 				create_sub_col(E,size,i,j,E_sub);
 
 				// calculate X_sub = E_sub * R
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
+            //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
                     size, 2, 2, alpha, E_sub, size, R, 2, beta, X_sub, size);
-            
+ 				 mul_mat(size,2,2,E_sub,R,X_sub);
+           
 				// update E
 				update_sub_col(E,size,i,j,X_sub);
+
+				//break;
          }
+			//break;i
+			chess_permute(arr1,arr2,size/2);
       }
+		printf("one sweep\n");
+		print(D,size);
+		break;
    }
 }
 

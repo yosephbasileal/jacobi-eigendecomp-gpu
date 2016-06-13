@@ -29,7 +29,7 @@
 }
 
 bool debug = false; // -d command line option for verbose output
-
+bool output = false; // -p command line option for ouputting results
 
 
 // Prints a matrix to stdout
@@ -116,8 +116,8 @@ float off(float* A, int size) {
 // Initalizes arrays for chess tournament ordering
 void chess_initialize(int* order1, int* order2, int size) {
    int curr = -1;
-	for(int i = 0; i < size; i++) {
-		order1[i] = ++curr;
+   for(int i = 0; i < size; i++) {
+     order1[i] = ++curr;
       order2[i] = ++curr;
    }
 }
@@ -217,71 +217,76 @@ __device__ void mul_mat(int m,int n,int k, float* a,float* b, float* c)
 
 __global__ void jacobi_kernel1(float* D_d, float* E_d, int size, int* arr1, int* arr2, float* cc, float* ss) {
 
-	// get i,j pair
-	int i = arr1[threadIdx.x];
-	int j = arr2[threadIdx.x];
+   // get i,j pair
+   int i = arr1[threadIdx.x];
+   int j = arr2[threadIdx.x];
 
-	// make sure i < j
-	if(i > j) {
-		swap(&i, &j);
-	}
+   // make sure i < j
+   if(i > j) {
+      swap(&i, &j);
+   }
 
-	// get precaculated values of c and s for current values of i and j
-	float c = cc[threadIdx.x];
-	float s = ss[threadIdx.x];
+   // get precaculated values of c and s for current values of i and j
+   float c = cc[threadIdx.x];
+   float s = ss[threadIdx.x];
 
-	// setup rotation matrix
-	float R_t[] = {c, -s, s, c};
+   // setup rotation matrix
+   float R_t[] = {c, -s, s, c};
 
-	// Submatrices (2xn or nx2 size) for storing intermediate results
+   // Submatrices (2xn or nx2 size) for storing intermediate results
    float* D_sub = (float *) malloc(sizeof(float) * 2 * size);
    float* E_sub = (float *) malloc(sizeof(float) * 2 * size);
    float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
 
-	// get submatrix of rows of D that will be affected by R' * D
+   if(D_sub == NULL || E_sub == NULL || X_sub == NULL) {
+      printf("Error: memory not allocated.\n");
+      return;
+   }
+
+   // get submatrix of rows of D that will be affected by R' * D
    create_sub_row(D_d, size, i, j, D_sub);
 
    // sgemm calculates C = alpha*A*B + beta*C
    //float alp = 1.0;
    //float bet = 0.0;
-	//const float* alpha = &alp;
-	//const float* beta = &bet;
+   //const float* alpha = &alp;
+   //const float* beta = &bet;
 
-	// Create a handle for CUBLAS
-	//cublasHandle_t handle;
-	//cublasCreate(&handle);
+   // Create a handle for CUBLAS
+   //cublasHandle_t handle;
+   //cublasCreate(&handle);
 
    // calculate X_sub = R' * D_sub
    //cublasSgemm(handle,CUBLAS_OP_T, CUBLAS_OP_N, \
                2, size, 2, alpha, R, 2, D_sub, size, beta, X_sub, size); 
-	mul_mat(2,size,2,R_t,D_sub,X_sub);
+   mul_mat(2,size,2,R_t,D_sub,X_sub);
 
-	// Destroy CUBLAS handle
-	//cublasDestroy(handle);
+   // Destroy CUBLAS handle
+   //cublasDestroy(handle);
 
    // update D
    update_sub_row(D_d,size,i,j,X_sub);
 
-	// free memory
-	free(D_sub);
-	free(E_sub);
-	free(X_sub);
+   // free memory
+   free(D_sub);
+   free(E_sub);
+   free(X_sub);
 }
 
 
 __global__ void jacobi_kernel2(float* D_d, float* E_d, int size, int* arr1, int* arr2, float* cc, float* ss) {
-	
-	// get i,j pair
-	int i = arr1[threadIdx.x];
-	int j = arr2[threadIdx.x];
+   
+   // get i,j pair
+   int i = arr1[threadIdx.x];
+   int j = arr2[threadIdx.x];
 
-	// make sure i < j
-	if(i > j) {
-		swap(&i,&j);
-	}
+   // make sure i < j
+   if(i > j) {
+      swap(&i,&j);
+   }
 
-	// get precaculated values of c and s for current values of i and j
-	float c = cc[threadIdx.x];
+   // get precaculated values of c and s for current values of i and j
+   float c = cc[threadIdx.x];
    float s = ss[threadIdx.x];
 
    // setup rotation matrix
@@ -292,24 +297,24 @@ __global__ void jacobi_kernel2(float* D_d, float* E_d, int size, int* arr1, int*
    float* E_sub = (float *) malloc(sizeof(float) * 2 * size);
    float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
 
-	// get submatrix of cols of D that will be affected by D * R
+   // get submatrix of cols of D that will be affected by D * R
    create_sub_col(D_d,size,i,j,D_sub);
 
-	// sgemm calculate C = alpha*A*B + beta*C
-	//float alp = 1.0;
-	//float bet = 0.0;
+   // sgemm calculate C = alpha*A*B + beta*C
+   //float alp = 1.0;
+   //float bet = 0.0;
    //const float* alpha = &alp;
    //const float* beta = &bet;
 
 
    // create a handle for CUBLAS
-	//cublasHandle_t handle;
-	//cublasCreate(&handle);
+   //cublasHandle_t handle;
+   //cublasCreate(&handle);
 
-	// calculate X_sub = D_sub * R
+   // calculate X_sub = D_sub * R
    //cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, \
                size, 2, 2, alpha, D_sub, size, R, 2, beta, X_sub, size);
-	 mul_mat(size,2,2,D_sub,R,X_sub);
+    mul_mat(size,2,2,D_sub,R,X_sub);
 
    // update D
    update_sub_col(D_d,size,i,j,X_sub);
@@ -321,21 +326,21 @@ __global__ void jacobi_kernel2(float* D_d, float* E_d, int size, int* arr1, int*
    //cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, \
                     size, 2, 2, alpha, E_sub, size, R, 2, beta, X_sub, size);
 
-	mul_mat(size,2,2,E_sub,R,X_sub);
+   mul_mat(size,2,2,E_sub,R,X_sub);
 
-	//cublasDestroy(handle);
+   //cublasDestroy(handle);
 
    // update E
    update_sub_col(E_d,size,i,j,X_sub);
 
-	// free memory
-	free(D_sub);
-	free(E_sub);
-	free(X_sub);
+   // free memory
+   free(D_sub);
+   free(E_sub);
+   free(X_sub);
 }
 
 // Jacobi method
-void jacobi(float* A, float* D, float* E, int size, float epsilon) {
+void jacobi(float* A, float* D, float* E, int size, float epsilon, int num_sweeps) {
    // initialize D and E
    copy(A, D, size);
    eye(E, size);
@@ -343,78 +348,89 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
    // device memory pointers
    float *D_d, *E_d;
 
-	// chess tournament ordering
-	int *arr1, *arr2;
-	
-	// store c and s values for each permutation
-	float *cc, *ss;
+   // chess tournament ordering
+   int *arr1, *arr2;
+   
+   // store c and s values for each permutation
+   float *cc, *ss;
 
-	cudaError_t cudaStatus;
+   cudaError_t cudaStatus;
 
-	// allocate unified memory
-	cudaMallocManaged(&arr1, sizeof(int) * size/2);
-	cudaMallocManaged(&arr2, sizeof(int) * size/2);
-	cudaMallocManaged(&cc, sizeof(float) * size/2);
-	cudaMallocManaged(&ss, sizeof(float) * size/2);	
+   // allocate unified memory
+   cudaMallocManaged(&arr1, sizeof(int) * size/2);
+   cudaMallocManaged(&arr2, sizeof(int) * size/2);
+   cudaMallocManaged(&cc, sizeof(float) * size/2);
+   cudaMallocManaged(&ss, sizeof(float) * size/2); 
    cudaMallocManaged(&D_d, sizeof(float) * size*size);
 
-	// allocate device memory
+   // allocate device memory
    cudaMalloc((void **) &E_d, sizeof(float) * size*size);
 
-	// copy matrices to device
-	copy(D,D_d,size);
+   // copy matrices to device
+   copy(D,D_d,size);
    cudaMemcpy(E_d, E, sizeof(float) * size*size, cudaMemcpyHostToDevice);
-	
-	// do sweeps
-	while(off(D_d,size) > epsilon) {
-		// initialize ordering of i,j pairs
-		chess_initialize(arr1, arr2, size/2);
-		
-		for(int h = 0; h < size-1; h++) {
 
-			// precalcuate values of c and s for current permuationt so
-			// that both kernels use the same rotation matrix
-			for(int k = 0; k < size/2; k++) {
-				int i = arr1[k];
-				int j = arr2[k];
-				if(i > j) swap(&i,&j);
-				jacobi_cs(D_d, size, i, j,&cc[k],&ss[k]);
-			}
+   // increase malloc heap size for threads
+   size_t sizee;
+   cudaStatus = cudaDeviceGetLimit(&sizee, cudaLimitMallocHeapSize);
+   HANDLE_ERROR(cudaStatus);
 
-			// launch kernel 1
-			jacobi_kernel1<<<1,size/2>>>(D_d, E_d, size, arr1, arr2, cc,ss);
-		
-			// synchronize
-			cudaStatus = cudaDeviceSynchronize();	
-			HANDLE_ERROR(cudaStatus);
+   cudaStatus = cudaDeviceSetLimit(cudaLimitMallocHeapSize,575*sizee);
+   HANDLE_ERROR(cudaStatus);
+   
+   int sweep_count = 0;
+   // do sweeps
+   while(off(D_d,size) > epsilon && sweep_count < num_sweeps) {
+      // initialize ordering of i,j pairs
+      chess_initialize(arr1, arr2, size/2);
+      
+      for(int h = 0; h < size-1; h++) {
 
-			// launch kernel 2
-			jacobi_kernel2<<<1,size/2>>>(D_d, E_d, size, arr1, arr2, cc, ss);
-			
-			// synchronize
+         // precalcuate values of c and s for current permuationt so
+         // that both kernels use the same rotation matrix
+         for(int k = 0; k < size/2; k++) {
+            int i = arr1[k];
+            int j = arr2[k];
+            if(i > j) swap(&i,&j);
+            jacobi_cs(D_d, size, i, j,&cc[k],&ss[k]);
+         }
+
+         // launch kernel 1
+         jacobi_kernel1<<<1,size/2>>>(D_d, E_d, size, arr1, arr2, cc,ss);
+      
+         // synchronize
+         cudaStatus = cudaDeviceSynchronize();  
+         HANDLE_ERROR(cudaStatus);
+
+         // launch kernel 2
+         jacobi_kernel2<<<1,size/2>>>(D_d, E_d, size, arr1, arr2, cc, ss);
+         
+         // synchronize
          cudaStatus = cudaDeviceSynchronize();
          HANDLE_ERROR(cudaStatus);
 
-			// do next permutation of i, j pairs
-			chess_permute(arr1, arr2, size/2);
-		}
+         // do next permutation of i, j pairs
+         chess_permute(arr1, arr2, size/2);
+      }
+      
+      sweep_count++;
 
-		if(debug) {
-			printf("One sweep done. New matrix D: \n");
-			print(D_d, size);
-			printf("\n");
-		}
+      if(debug) {
+         printf("One sweep done. New matrix D: \n");
+         print(D_d, size);
+         printf("\n");
+      }
    }
-	
-	// copy to host
-	copy(D_d,D,size);
-	cudaMemcpy(E, E_d, sizeof(float) * size*size, cudaMemcpyDeviceToHost);
+   
+   // copy to host
+   copy(D_d,D,size);
+   cudaMemcpy(E, E_d, sizeof(float) * size*size, cudaMemcpyDeviceToHost);
 
-	// free memory
-	cudaFree(arr1);
-	cudaFree(arr2);
-	cudaFree(D_d);
-	cudaFree(E_d);
+   // free memory
+   cudaFree(arr1);
+   cudaFree(arr2);
+   cudaFree(D_d);
+   cudaFree(E_d);
 }
 
 // Main
@@ -422,11 +438,14 @@ int main(int argc, char** argv) {
 
    // process command line arguments
    int r;
-   while ((r = getopt(argc, argv, "d")) != -1) {
+   while ((r = getopt(argc, argv, "dp")) != -1) {
       switch(r)
       {
          case 'd':
             debug = true;
+            break;
+         case 'p':
+            output = true;
             break;
          default:
             exit(1);
@@ -452,7 +471,7 @@ int main(int argc, char** argv) {
    // make sure matrix is symmetric
    if(!is_symmetric(A, size)) {
       printf("Error: Given matrix not symmetric!\n");
-      return 0;
+      //return 0;
    }
  
    if(debug) {
@@ -463,25 +482,28 @@ int main(int argc, char** argv) {
 
    // desired accuracy
    float epsilon = 0.01;
+   int num_sweeps = 6;
 
    // call facobi method
-   jacobi(A, D, E, size, epsilon);
+   jacobi(A, D, E, size, epsilon, num_sweeps);
    remove_nondiag(D, size);
 
    // output results
-   printf("\n");
-   printf("______Results______\n");
-   printf("Eigenvalues on the diagonal:\n");
-   print(D, size);
-   printf("\n");
-   printf("Corresponding eigenvectors:\n");
-   print(E, size);
-   printf("\n");
+   if(output) {
+      printf("\n");
+      printf("______Results______\n");
+      printf("Eigenvalues on the diagonal:\n");
+      print(D, size);
+      printf("\n");
+      printf("Corresponding eigenvectors:\n");
+      print(E, size);
+      printf("\n");
+   }
 
-	// clean up
-	free(A);
-	free(D);
-	free(E);
+   // clean up
+   free(A);
+   free(D);
+   free(E);
 
    return 0;
 }

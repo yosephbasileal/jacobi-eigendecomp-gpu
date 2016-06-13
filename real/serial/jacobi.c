@@ -14,6 +14,7 @@
 #include <cblas.h>
 
 bool debug = false; // -d command line option for verbose output
+bool output = false; // -p command line option for outputting results
 
 // Prints a matrix to stdout
 void print(float* A, int size) {
@@ -27,12 +28,12 @@ void print(float* A, int size) {
 
 // Prints a non-square matrix to stdout
 void print2(float* A, int row, int col) {
-	for(int i = 0; i < row; i++) {
-		for(int j = 0; j < col; j++) {
-			printf("%.4f  ", A[i*col+j]);
-		}
-		printf("\n");
-	}
+   for(int i = 0; i < row; i++) {
+      for(int j = 0; j < col; j++) {
+         printf("%.4f  ", A[i*col+j]);
+      }
+      printf("\n");
+   }
 }
 
 // Copies matrix elements 'from' to 'to'
@@ -168,17 +169,19 @@ void mul_mat(int m,int n,int k, float* a,float* b, float* c)
 
 
 // Jacobi method
-void jacobi(float* A, float* D, float* E, int size, float epsilon) {
+void jacobi(float* A, float* D, float* E, int size, float epsilon, int num_sweeps) {
    // initialize D and E
    copy(A, D, size);
    eye(E, size);
 
-	// submatrices (2xn or nx2 size) for storing intermediate results
-	float* D_sub = (float *) malloc(sizeof(float) * 2 * size);
-	float* E_sub = (float *) malloc(sizeof(float) * 2 * size);
-	float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
+   // submatrices (2xn or nx2 size) for storing intermediate results
+   float* D_sub = (float *) malloc(sizeof(float) * 2 * size);
+   float* E_sub = (float *) malloc(sizeof(float) * 2 * size);
+   float* X_sub = (float *) malloc(sizeof(float) * 2 * size);
 
-   while(off(D,size) > epsilon) {
+   int sweep_count = 0;
+   // do sweeps
+   while(off(D,size) > epsilon && sweep_count < num_sweeps) {
       // execute a cycle of n(n-1)/2 rotations
       for(int i = 0; i < size - 1; i++) {
          for(int j = i + 1; j < size; j++) {
@@ -188,7 +191,7 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
 
             // setup rotation matrix
             float R[] = {c, s, -s, c};
-				float R_t[] = {c, -s, s, c};
+            float R_t[] = {c, -s, s, c};
 
             if(debug) {
                printf("Zeroed out element D(%d,%d)\n",i,j);
@@ -204,9 +207,9 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
             // calculate X_sub = R' * D_sub
             //cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, \
                     2, size, 2, alpha, R, 2, D_sub, size, beta, X_sub, size);
-				mul_mat(2,size,2,R_t,D_sub,X_sub);
+            mul_mat(2,size,2,R_t,D_sub,X_sub);
 
-				// update D
+            // update D
             update_sub_row(D,size,i,j,X_sub);
 
             // get submatrix of cols of D that will be affected by D * R
@@ -227,17 +230,18 @@ void jacobi(float* A, float* D, float* E, int size, float epsilon) {
             }
 
             // get submatrix of cols of E that iwll be affected by E * R
-				create_sub_col(E,size,i,j,E_sub);
+            create_sub_col(E,size,i,j,E_sub);
 
-				// calculate X_sub = E_sub * R
+            // calculate X_sub = E_sub * R
             //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
                     size, 2, 2, alpha, E_sub, size, R, 2, beta, X_sub, size);
- 				mul_mat(size,2,2,E_sub,R,X_sub);
+            mul_mat(size,2,2,E_sub,R,X_sub);
 
-				// update E
-				update_sub_col(E,size,i,j,X_sub);
+            // update E
+            update_sub_col(E,size,i,j,X_sub);
          }
       }
+      sweep_count++;
    }
 }
 
@@ -246,11 +250,14 @@ int main(int argc, char** argv) {
 
    // process command line arguments
    int r;
-   while ((r = getopt(argc, argv, "d")) != -1) {
+   while ((r = getopt(argc, argv, "dp")) != -1) {
       switch(r)
       {
          case 'd':
             debug = true;
+            break;
+         case 'p':
+            output = true;
             break;
          default:
             exit(1);
@@ -276,7 +283,7 @@ int main(int argc, char** argv) {
    // make sure matrix is symmetric
    if(!is_symmetric(A, size)) {
       printf("Error: Given matrix not symmetric!\n");
-      return 0;
+      //return 0;
    }
 
    if(debug) {
@@ -287,20 +294,23 @@ int main(int argc, char** argv) {
 
    // desired accuracy
    float epsilon = 0.001;
+   int num_sweeps = 6;
 
    // call facobi method
-   jacobi(A, D, E, size, epsilon);
+   jacobi(A, D, E, size, epsilon, num_sweeps);
    remove_nondiag(D, size);
 
    // output results
-   printf("\n");
-   printf("______Results______\n");
-   printf("Eigenvalues on the diagonal:\n");
-   print(D, size);
-   printf("\n");
-   printf("Corresponding eigenvectors:\n");
-   print(E, size);
-   printf("\n");
+   if(output) {
+      printf("\n");
+      printf("______Results______\n");
+      printf("Eigenvalues on the diagonal:\n");
+      print(D, size);
+      printf("\n");
+      printf("Corresponding eigenvectors:\n");
+      print(E, size);
+      printf("\n");
+   }
 
    return 0;
 }

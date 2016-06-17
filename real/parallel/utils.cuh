@@ -10,7 +10,7 @@
 #include <math.h>
 #include <stdbool.h>
 
-// Prints a matrix to stdout
+// Prints a square matrix to stdout
 void print(double* A, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = 0; j < size; j++) {
@@ -106,49 +106,3 @@ int compare(const void* a, const void* b) {
    else if ( f_a < f_b ) return -1;
    else return 1;
 }
-
-// Given pivot(i,j), constructs a submatrix of rows affected J'*A
-__device__ void create_sub_row(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A_sub[0 * size + k] = A[i * size + k];
-      A_sub[1 * size + k] = A[j * size + k];
-   }
-}
-
-// Given pivot(i,j), constructs a submatrix of row affected by A*J
-__device__ void create_sub_col(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A_sub[k * 2 + 0] = A[k * size + i];
-      A_sub[k * 2 + 1] = A[k * size + j];
-   }
-}
-
-// Updates the original matrix's rows with changes made to submatrix
-__device__ void update_sub_row(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A[i * size + k] = A_sub[0 * size + k];
-      A[j * size + k] = A_sub[1 * size + k];
-   }
-}
-
-// Updates the original matrix's cols with changes made to submatrix
-__device__ void update_sub_col(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A[k * size + i] = A_sub[k * 2 + 0];
-      A[k * size + j] = A_sub[k * 2 + 1];
-   }
-}
-
-// Multiplies A(mxk) matrix by B(kxn) matrix
-__device__ void mul_mat(int m,int n,int k, double* a,double* b, double* c) {
-   int i,j,h;
-   for(i = 0; i < m; i++) {
-      for(j = 0; j < n; j++) {
-         c[i * n + j] = 0;
-         for(h = 0; h< k; h++) {
-            c[i * n + j] += + a[i * k + h] * b[h * n + j];
-         }
-      }
-   }
-}
-

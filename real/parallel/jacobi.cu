@@ -103,14 +103,13 @@ __global__ void jacobi_kernel1(double* D, double* X, int size, int* arr1, int* a
    double R_T[] = {c, -s, s, c};
 
    // get row i and row j elements for current thread
-   double row_i = D[i * size + tid];
-   double row_j = D[j * size + tid];
+   double row_i = D[i*size+tid];
+   double row_j = D[j*size+tid];
 
    // calculate X = R' * D
    X[i*size+tid] = R_T[0] * row_i + R_T[1] * row_j;
    X[j*size+tid] = R_T[2] * row_i + R_T[3] * row_j;
 }
-
 
 __global__ void jacobi_kernel2(double* D, double* E, double* X, int size, int* arr1, int* arr2, double* cc, double* ss) {
 
@@ -135,20 +134,20 @@ __global__ void jacobi_kernel2(double* D, double* E, double* X, int size, int* a
    double R[] = {c, s, -s, c};
 
    // get col i and col j elements of X for current thread
-   double x_col_i = X[tid * size + i];
-   double x_col_j = X[tid * size + j];
+   double x_col_i = X[tid*size+i];
+   double x_col_j = X[tid*size+j];
 
    // calculate D = X * R
-   D[i*size+tid] = x_col_i * R[0] + x_col_j * R[2];
-   D[j*size+tid] = x_col_i * R[1] + x_col_j * R[3];
+   D[tid*size+i] = x_col_i * R[0] + x_col_j * R[2];
+   D[tid*size+j] = x_col_i * R[1] + x_col_j * R[3];
 
    // get col i and col j elements of E for current thread
-   double e_col_i = E[tid * size + i];
-   double e_col_j = E[tid * size + j];
+   double e_col_i = E[tid*size+i];
+   double e_col_j = E[tid*size+j];
 
    // caclulate E = E * R
-   E[i*size+tid] = e_col_i * R[0] + e_col_j * R[2];
-   E[j*size+tid] = e_col_i * R[1] + e_col_j * R[3];
+   E[tid*size+i] = e_col_i * R[0] + e_col_j * R[2];
+   E[tid*size+j] = e_col_i * R[1] + e_col_j * R[3];
 }
 
 // Jacobi method
@@ -184,14 +183,6 @@ void jacobi(double* A, double* D, double* E, int size, double epsilon, int num_s
    // copy matrices to device
    copy(D,D_d,size);
    cudaMemcpy(E_d, E, sizeof(double) * size*size, cudaMemcpyHostToDevice);
-
-   // increase malloc heap size for threads
-   size_t sizee;
-   cudaStatus = cudaDeviceGetLimit(&sizee, cudaLimitMallocHeapSize);
-   HANDLE_ERROR(cudaStatus);
-
-   cudaStatus = cudaDeviceSetLimit(cudaLimitMallocHeapSize,575*sizee);
-   HANDLE_ERROR(cudaStatus);
 
    int sweep_count = 0;
    double offA;

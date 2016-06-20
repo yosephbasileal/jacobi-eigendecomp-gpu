@@ -20,6 +20,16 @@ void print(double* A, int size) {
    }
 }
 
+// Prints a square matrix to stdout, column major format
+void print_cm(double* A, int size) {
+   for(int i = 0; i < size; i++) {
+      for(int j = 0; j < size; j++) {
+         printf("%.8lf  ",A [j*size+i]);
+      }
+      printf("\n");
+   }
+}
+
 // Prints a non-square matrix to stdout
 void print2(double* A, int row, int col) {
    for(int i = 0; i < row; i++) {

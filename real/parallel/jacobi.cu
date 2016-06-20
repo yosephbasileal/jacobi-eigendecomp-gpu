@@ -1,6 +1,7 @@
 
 /* jacobi.cu: Cyclic Jacobi method for finding eigenvalues and eigenvectrors
  *
+ *
  * Author: Basileal Imana
  * Date: 06/10/16
  */
@@ -106,10 +107,11 @@ __global__ void jacobi_kernel1(double* D, double* X, int size, int* arr1, int* a
    double row_i = D[i*size+tid];
    double row_j = D[j*size+tid];
 
-   // calculate X = R' * D
-   X[i*size+tid] = R_T[0] * row_i + R_T[1] * row_j;
-   X[j*size+tid] = R_T[2] * row_i + R_T[3] * row_j;
+   // calculate X = R' * D, X is column major array
+   X[tid*size+i] = R_T[0] * row_i + R_T[1] * row_j;
+   X[tid*size+j] = R_T[2] * row_i + R_T[3] * row_j;
 }
+
 
 __global__ void jacobi_kernel2(double* D, double* E, double* X, int size, int* arr1, int* arr2, double* cc, double* ss) {
 
@@ -134,20 +136,20 @@ __global__ void jacobi_kernel2(double* D, double* E, double* X, int size, int* a
    double R[] = {c, s, -s, c};
 
    // get col i and col j elements of X for current thread
-   double x_col_i = X[tid*size+i];
-   double x_col_j = X[tid*size+j];
+   double x_col_i = X[i*size+tid];
+   double x_col_j = X[j*size+tid];
 
-   // calculate D = X * R
-   D[tid*size+i] = x_col_i * R[0] + x_col_j * R[2];
-   D[tid*size+j] = x_col_i * R[1] + x_col_j * R[3];
+   // calculate D = X * R, X is column major array
+   D[i*size+tid] = x_col_i * R[0] + x_col_j * R[2];
+   D[j*size+tid] = x_col_i * R[1] + x_col_j * R[3];
 
    // get col i and col j elements of E for current thread
-   double e_col_i = E[tid*size+i];
-   double e_col_j = E[tid*size+j];
+   double e_col_i = E[i*size+tid];
+   double e_col_j = E[j*size+tid];
 
-   // caclulate E = E * R
-   E[tid*size+i] = e_col_i * R[0] + e_col_j * R[2];
-   E[tid*size+j] = e_col_i * R[1] + e_col_j * R[3];
+   // caclulate E = E * R, E is column major array
+   E[i*size+tid] = e_col_i * R[0] + e_col_j * R[2];
+   E[j*size+tid] = e_col_i * R[1] + e_col_j * R[3];
 }
 
 // Jacobi method
@@ -159,7 +161,7 @@ void jacobi(double* A, double* D, double* E, int size, double epsilon, int num_s
    eye(E, size);
 
    // device memory pointers for matrices
-   double *D_d, *E_d, *X_d;
+   double *D_d, *E_d, *X_d; //E and X are column major arrays
 
    // chess tournament ordering arr1 stores i, arr2 stroes j
    int *arr1, *arr2;
@@ -332,7 +334,7 @@ int main(int argc, char** argv) {
       }
       printf("\n");
       //printf("Eigenvectors:\n");
-      //print(E, size);
+      //print_cm(E, size);
       //printf("\n");
    }
 

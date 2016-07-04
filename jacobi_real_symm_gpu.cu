@@ -1,6 +1,6 @@
 
 /* jacobi.cu: Cyclic Jacobi method for finding eigenvalues and eigenvectrors
- *
+ *            of real symmetric matrices
  *
  * Author: Basileal Imana
  * Date: 06/10/16
@@ -13,7 +13,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <time.h>
-#include "utils.cuh"
+#include "utils.h"
 
 /** Cuda handle error, if err is not success print error and line in code
 *
@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
       printf("\n");
       printf("Sorted Eigenvalues:\n");
       for(int i = 0; i < size; i++) {
-         printf("%.8lf\n",ei[i]);
+         printf("%.15lf\n",ei[i]);
       }
       printf("\n");
       //printf("Eigenvectors:\n");

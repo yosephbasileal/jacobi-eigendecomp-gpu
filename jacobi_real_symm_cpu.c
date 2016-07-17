@@ -69,20 +69,10 @@ void jacobi(double* A, double* D, double* E, int size, double epsilon, int num_s
             double R[] = {c, s, -s, c};
             double R_t[] = {c, -s, s, c};
 
-            if(debug) {
-               printf("Zeroed out element D(%d,%d)\n",i,j);
-            }
-
             // get submatrix of rows of D that will be affected by R' * D
             create_sub_row(D, size, i, j, D_sub);
 
-            // sgemm calculates C = alpha*A*B + beta*C
-            double alpha = 1.0;
-            double beta = 0.0;
-
             // calculate X_sub = R' * D_sub
-            //cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, \
-                    2, size, 2, alpha, R, 2, D_sub, size, beta, X_sub, size);
             mul_mat(2,size,2,R_t,D_sub,X_sub);
 
             // update D
@@ -92,25 +82,15 @@ void jacobi(double* A, double* D, double* E, int size, double epsilon, int num_s
             create_sub_col(D,size,i,j,D_sub);
 
             // calculate X_sub = D_sub * R
-            //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                    size, 2, 2, alpha, D_sub, size, R, 2, beta, X_sub, size);
             mul_mat(size,2,2,D_sub,R,X_sub);
 
             // update D
             update_sub_col(D,size,i,j,X_sub);
 
-            if(debug) {
-               printf("New transformed matrix D:\n");
-               print(D,size);
-               printf("\n");
-            }
-
             // get submatrix of cols of E that iwll be affected by E * R
             create_sub_col(E,size,i,j,E_sub);
 
             // calculate X_sub = E_sub * R
-            //cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, \
-                    size, 2, 2, alpha, E_sub, size, R, 2, beta, X_sub, size);
             mul_mat(size,2,2,E_sub,R,X_sub);
 
             // update E

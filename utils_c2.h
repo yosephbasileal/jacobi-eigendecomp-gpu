@@ -11,24 +11,24 @@
 #include <stdbool.h>
 #include <complex.h>
 
-#define create_comp(a,b) {a + b*I}
+#define create_comp(a,b) (a + b*I)
 typedef double complex comp;
 
 // Prints a square matrix to stdout
-void print(double* A, int size) {
+void print(comp* A, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = 0; j < size; j++) {
-         printf("%.8lf  ",A [i*size+j]);
-      }
+      	printf("%+.4f%+.4fi  ", creal(A[i*size+j]), cimag(A[i*size+j]));
+		}
       printf("\n");
    }
 }
 
 // Prints a square matrix to stdout, column major format
-void print_cm(double* A, int size) {
+void print_cm(comp* A, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = 0; j < size; j++) {
-         printf("%.8lf  ",A [j*size+i]);
+         printf("%+.4f%+.4fi  ", creal(A[j*size+i]), cimag(A[j*size+i]));
       }
       printf("\n");
    }
@@ -38,14 +38,14 @@ void print_cm(double* A, int size) {
 void print2(double* A, int row, int col) {
    for(int i = 0; i < row; i++) {
       for(int j = 0; j < col; j++) {
-         printf("%.8lf  ", A[i*col+j]);
+         printf("%+.4f%+.4fi  ", creal(A[i*col+j]), cimag(A[i*col+j]));
       }
       printf("\n");
    }
 }
 
 // Copies square matrix elements 'from' to 'to'
-void copy(double* from, double* to, int size) {
+void copy(comp* from, comp* to, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = 0; j < size; j++) {
          to[i*size+j] = from[i*size+j];
@@ -53,8 +53,8 @@ void copy(double* from, double* to, int size) {
    }
 }
 
-// Makes matrix A an identity matrix
-void eye(double* A, int size) {
+// Makes matrix A an identity matrix - complex
+void eye(comp* A, int size) {
    for(int i = 0; i < size; i++) {
       for(int j = i; j < size; j++) {
          if(i == j) {
@@ -62,17 +62,6 @@ void eye(double* A, int size) {
          } else {
             A[i*size+j] = 0.0;
             A[j*size+i] = 0.0;
-         }
-      }
-   }
-}
-
-// Make all non diagonal elements of square matrix A 0
-void remove_nondiag(double* A, int size) {
-   for(int i = 0; i < size; i++) {
-      for(int j = 0; j < size; j++) {
-         if(i != j) {
-            A[i*size+j] = 0.0;
          }
       }
    }
@@ -90,14 +79,13 @@ bool is_symmetric(double* A, int size) {
    return true;
 }
 
-// Calculates the square root of sum of squares of
-// all off diagonal elements of symmetric matrix A
-double off(double* A, int size) {
+// Calculates norm of strictly lower triangluar part
+// of matrix A
+double lower(comp * A, int size) {
    double sum = 0;
-   for(int i = 0; i < size - 1; i++) {
-      for(int j = i + 1; j < size; j++) {
-         // multiply by 2 to account for other half of matrix
-         sum += 2 * A[i*size+j] * A[i*size+j];
+   for(int i = 0; i < size; i++) {
+      for(int j = 0; j <= i - 1; j++) {
+         sum += pow(cabs(A[i*size+j]),2);
       }
    }
 
@@ -105,7 +93,7 @@ double off(double* A, int size) {
 }
 
 // Get a vecotr that contains diagonal elements of matrix A
-void get_diagonals(double* d, double* A, int size) {
+void get_diagonals(comp* d, comp* A, int size) {
    for(int i = 0; i < size; i++) {
       d[i] = A[i*size+i];
    }
@@ -113,47 +101,15 @@ void get_diagonals(double* d, double* A, int size) {
 
 // Comparator for sorting an array of flaots using qsort
 int compare(const void* a, const void* b) {
-   double f_a = *((double *) a );
-   double f_b = *((double *) b );
+   comp f_a = *((comp *) a );
+   comp f_b = *((comp *) b );
 
-   if(f_a == f_b ) return 0;
-   else if ( f_a < f_b ) return -1;
+   if(cabs(f_a) == cabs(f_b) ) return 0;
+   else if ( cabs(f_a) < cabs(f_b) ) return -1;
    else return 1;
 }
 
 // Given pivot(i,j), constructs a submatrix of rows affected J'*A
-void create_sub_row(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A_sub[0 * size + k] = A[i * size + k];
-      A_sub[1 * size + k] = A[j * size + k];
-   }
-}
-
-// Given pivot(i,j), constructs a submatrix of row affected by A*J
-void create_sub_col(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A_sub[k * 2 + 0] = A[k * size + i];
-      A_sub[k * 2 + 1] = A[k * size + j];
-   }
-}
-
-// Updates the original matrix's rows with changes made to submatrix
-void update_sub_row(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A[i * size + k] = A_sub[0 * size + k];
-      A[j * size + k] = A_sub[1 * size + k];
-   }
-}
-
-// Updates the original matrix's cols with changes made to submatrix
-void update_sub_col(double* A, int size, int i, int j, double* A_sub) {
-   for(int k = 0; k < size; k++) {
-      A[k * size + i] = A_sub[k * 2 + 0];
-      A[k * size + j] = A_sub[k * 2 + 1];
-   }
-}
-
-// Given pivot(i,j), constructs a submatrix of rows affected J'*A - complex
 void create_sub_row(comp* A, int size, int i, int j, comp* A_sub) {
    for(int k = 0; k < size; k++) {
       A_sub[0 * size + k] = A[i * size + k];
@@ -161,7 +117,7 @@ void create_sub_row(comp* A, int size, int i, int j, comp* A_sub) {
    }
 }
 
-// Given pivot(i,j), constructs a submatrix of row affected by A*J - complex
+// Given pivot(i,j), constructs a submatrix of row affected by A*J
 void create_sub_col(comp* A, int size, int i, int j, comp* A_sub) {
    for(int k = 0; k < size; k++) {
       A_sub[k * 2 + 0] = A[k * size + i];
@@ -169,7 +125,7 @@ void create_sub_col(comp* A, int size, int i, int j, comp* A_sub) {
    }
 }
 
-// Updates the original matrix's rows with changes made to submatrix - complex
+// Updates the original matrix's rows with changes made to submatrix
 void update_sub_row(comp* A, int size, int i, int j, comp* A_sub) {
    for(int k = 0; k < size; k++) {
       A[i * size + k] = A_sub[0 * size + k];
@@ -177,7 +133,7 @@ void update_sub_row(comp* A, int size, int i, int j, comp* A_sub) {
    }
 }
 
-// Updates the original matrix's cols with changes made to submatrix - complex
+// Updates the original matrix's cols with changes made to submatrix
 void update_sub_col(comp* A, int size, int i, int j, comp* A_sub) {
    for(int k = 0; k < size; k++) {
       A[k * size + i] = A_sub[k * 2 + 0];
@@ -185,17 +141,31 @@ void update_sub_col(comp* A, int size, int i, int j, comp* A_sub) {
    }
 }
 
+// Get ith row of a matrix
+void get_ith_row(comp* A, int size, int i, comp* A_i) {
+	for(int k = 0; k < size; k++) {
+		A_i[k] = A[i*size+k];
+	}
+}
 
-// Multiplies A(mxk) matrix by B(kxn) matrix
-void mul_mat(int m,int n,int k, double* a,double* b, double* c) {
-   int i,j,h;
-   for(i = 0; i < m; i++) {
-      for(j = 0; j < n; j++) {
-         c[i * n + j] = 0;
-         for(h = 0; h< k; h++) {
-            c[i * n + j] += + a[i * k + h] * b[h * n + j];
-         }
-      }
+// Update ith row of a matrix
+void update_ith_row(comp* A, int size, int i, comp* A_i) {
+	for(int k = 0; k < size; k++) {
+		A[i*size+k] = A_i[k];
+	}
+}
+
+// Get jth column of a matrix
+void get_jth_col(comp* A, int size, int j, comp* A_j) {
+   for(int k = 0; k < size; k++) {
+      A_j[k] = A[k*size+j];
+   }
+}
+
+// Update jth column of a matrix
+void update_jth_col(comp* A, int size, int j, comp* A_j) {
+   for(int k = 0; k < size; k++) {
+      A[k*size+j] = A_j[k];
    }
 }
 
@@ -210,6 +180,13 @@ void mul_mat(int m,int n,int k, comp* a, comp* b, comp* c) {
          }
       }
    }
+}
+
+// Multiplies A vector of size n with a scalar c
+void vec_mat(int n, comp* V, double c, comp* result) {
+	for(int i = 0; i < n; i++) {
+		result[i] = V[i] * c;
+	}
 }
 
 // Create a random square complex matrix

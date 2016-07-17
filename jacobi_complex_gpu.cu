@@ -419,7 +419,6 @@ __global__ void jacobi_kernel2_d(comp* A, comp* E, comp* X, int size, comp* tt) 
 
 // Jacobi method
 void jacobi(comp* A, comp* E, int size, double epsilon) {
-   printf("Initializing...\n");
 
    // initialize E
    eye(E, size);
@@ -454,8 +453,8 @@ void jacobi(comp* A, comp* E, int size, double epsilon) {
 	double cond = (size*size/2) * eps;
    int sweep_count = 0;
    double lowerA;
-
-   // do sweeps
+   
+	// do sweeps
    while(((lowerA = lower(A_d,size)) > cond) && (sweep_count < num_sweeps)) {
 
       sweep_count++;
@@ -578,7 +577,7 @@ int main(int argc, char** argv) {
    }
 
    if(size == 0) {
-      printf("Error: Missing option -N <size of matrix>)\n");
+      printf("Error: missing option -N <size of matrix>)\n");
       return 0;
    }
 
@@ -592,7 +591,7 @@ int main(int argc, char** argv) {
    // create a random matrix
    create_mat(A, size);
 
-   if(output) {
+   if(debug) {
       printf("Input matrix A: \n");
       print(A, size);
       printf("\n");
@@ -609,10 +608,8 @@ int main(int argc, char** argv) {
    end = clock();
    time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
-   //printf("Post-processing...\n");
-   //remove_nondiag(A, size);
    get_diagonals(ei, A, size);
-   //qsort(ei, size, sizeof(double), compare);
+   qsort(ei, size, sizeof(comp), compare);
 
    // output results
    if(output) {
@@ -627,7 +624,7 @@ int main(int argc, char** argv) {
       //printf("\n");
    }
 
-   printf("Execution time of Jacobi: %lf\n", time_spent);
+   printf("Execution time: %lf\n", time_spent);
 
    // clean up
    free(A);

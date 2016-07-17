@@ -1,4 +1,4 @@
-/* utils_c.h: Utility functions for complex matrices
+/* Utility functions for CUDA
  *
  * Author: Basileal Imana
  * Date: 07/04/16
@@ -45,18 +45,7 @@ void print2(comp* A, int row, int col) {
    }
 }
 
-// Prints a non-square matrix to stdout
-void print3(int* A, int row, int col) {
-   for(int i = 0; i < row; i++) {
-      for(int j = 0; j < col; j++) {
-         printf("%d ", A[i*col+j]);
-      }
-      printf("\n");
-   }
-}
-
-
-// Prints value of a variable
+// Prints value of a complex number
 void printd(comp val, const char* name) {
 	printf("%s: %+.4f%+.4fi\n", name, val.real(), val.imag());
 }

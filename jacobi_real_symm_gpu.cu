@@ -1,6 +1,6 @@
 
-/* jacobi.cu: Cyclic Jacobi method for finding eigenvalues and eigenvectrors
- *            of real symmetric matrices
+/* Cyclic Jacobi method for finding eigenvalues and eigenvectrors
+ * of real symmetric matrices
  *
  * Author: Basileal Imana
  * Date: 06/10/16

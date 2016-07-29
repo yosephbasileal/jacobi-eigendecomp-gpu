@@ -35,7 +35,7 @@ void print_cm(comp* A, int size) {
 }
 
 // Prints a non-square matrix to stdout
-void print2(double* A, int row, int col) {
+void print2(comp* A, int row, int col) {
    for(int i = 0; i < row; i++) {
       for(int j = 0; j < col; j++) {
          printf("%+.4f%+.4fi  ", creal(A[i*col+j]), cimag(A[i*col+j]));
@@ -199,4 +199,3 @@ void create_mat(comp* A, int size) {
       }
    }
 }
-

@@ -59,68 +59,20 @@ void chess_permute(int* order1, int* order2, int size) {
    order1[1] = temp;
 }
 
-__global__ void chess_permute_kernel1(int* order2, const int size) {
-	//extern __shared__ int temp[];
-
-	int tid = threadIdx.x;
-
-	int temp = order2[tid+1];
-	__syncthreads();
-	order2[tid] = temp;
-}
-
-__global__ void chess_permute_kernel2(int * order1, const int size) {
-	//extern __shared__ int temp[];
-	
-	int tid = threadIdx.x;
-
-	int temp= order1[tid+1];
-	__syncthreads();
-	order1[tid+2] = temp;
-}
-
-
-void chess_permute2(int* order1, int* order2, int size) {
-    cudaError_t cudaStatus;
-	//const int sm_size1 = sizeof(int)*(size-1);
-	//const int sm_size2 = sizeof(int)*(size-2);
-	int temp = order2[0];
-
-   chess_permute_kernel1<<<1,size-1>>>(order2,size);
-	/*for(int i = 0; i <= size - 2; i++) {
-      order2[i] = order2[i+1];
-   }*/
-
-	cudaStatus = cudaDeviceSynchronize();
-   HANDLE_ERROR(cudaStatus);
-
-   order2[size-1] = order1[size-1];
-
-   chess_permute_kernel2<<<1,size-2>>>(order1,size);
-   /*for(int i = size - 1; i >= 2; i--) {
-      order1[i] = order1[i-1];
-   }*/
-
-	   cudaStatus = cudaDeviceSynchronize();
-   HANDLE_ERROR(cudaStatus);
-	
-   order1[1] = temp;
-}
-
 // Calculates parameters for unitary transformation matrix
-__device__ void unitary_params(comp* A, int size, int p, int q, comp* c, comp* s) {
+__host__ __device__ void unitary_params(comp* A, int size, int p, int q, comp* c, comp* s) {
    
    comp d_pq, d_max1, d_max2, d_max, m, tan_x, theta, x, e_itheta, e_mitheta;
-   double theta_r;
-	
+   double theta_r, x_r;
+
    d_pq = -(A[q*size+q] - A[p*size+p])/2.0;
-   
+
    d_max1 = d_pq + sqrt(pow(d_pq,2)+A[p*size+q]*A[q*size+p]);
    d_max2 = d_pq - sqrt(pow(d_pq,2)+A[p*size+q]*A[q*size+p]);
    d_max = (abs(d_max1) > abs(d_max2))? d_max1 : d_max2;
 
    m = A[q*size+p]/d_max;
-	
+
    if(abs(m.real()) < eps) {
       theta = M_PI/2;
    } else {
@@ -131,46 +83,56 @@ __device__ void unitary_params(comp* A, int size, int p, int q, comp* c, comp* s
 
    e_itheta = create_comp(cos(theta_r),sin(theta_r)); //e^(I * theta)
    e_mitheta = create_comp(cos(theta_r),-sin(theta_r)); //e^(-I * theta)
-   
+
    tan_x = (e_itheta * A[q*size+p])/d_max;
    x = atan(tan_x);
-
+   x_r = x.real();
    *c = cos(x);
-   *s = e_itheta*sin(x);
+   *s = e_itheta*sin(x_r);
 }
 
 // Calculates parameters for shear transformation matrix
-__device__ void shear_params(comp* A, int size, int p, int q, comp* c, comp* s) {
+__host__ __device__ void shear_params(comp* A, int size, int p, int q, comp* c, comp* s) {
 
    comp g_pq = 0, d_pq, c_pq = 0, e_pq, tanh_y, y, alpha, e_ialpha, e_mialpha, temp;
-   double alpha_r;
+   double alpha_r, y_r;
+
+   comp pth_row = 0, qth_row = 0, pth_col = 0, qth_col = 0;
 
    for(int j = 0; j < size; j++) {
-      if(j != p && j != q) {
-         g_pq += pow(abs(A[p*size+j]),2) + pow(abs(A[q*size+j]),2);
-         g_pq += pow(abs(A[j*size+p]),2) + pow(abs(A[j*size+q]),2);
+      comp A_pj = A[p*size+j];
+      comp A_qj = A[q*size+j];
+      comp A_jp = A[j*size+p];
+      comp A_jq = A[j*size+q];
+   
+      c_pq += A_pj*conj(A_qj) - conj(A_jp)*A_jq;
+
+      if(j != p && j!= q) {
+         pth_row += pow(abs(A_pj),2);
+         pth_col += pow(abs(A_jp),2);
+         qth_row += pow(abs(A_qj),2);
+         qth_col += pow(abs(A_jq),2);
       }
    }
-   
-	d_pq = A[q*size+q] - A[p*size+p];
 
-   for(int j = 0; j < size; j++) {
-      c_pq += A[p*size+j]*conj(A[q*size+j]) - conj(A[j*size+p])*A[j*size+q];
-   }
+   g_pq = pth_col + pth_row + qth_col + qth_row;
+
+   d_pq = A[q*size+q] - A[p*size+p];
 
    alpha = arg(c_pq) - M_PI/2;
    alpha_r = alpha.real();
-	
+
    e_ialpha = create_comp(cos(alpha_r), sin(alpha_r)); //e^(I * alpha)
    e_mialpha = create_comp(cos(alpha_r), -sin(alpha_r)); //e^(-I * alpha)
 
    e_pq = e_ialpha * A[q*size+p] + e_mialpha * A[p*size+q];
 
    tanh_y = -abs(c_pq)/(2*(pow(abs(d_pq),2)+pow(abs(e_pq),2)) + g_pq);
-	y = atanh(tanh_y);
 
+   y = atanh(tanh_y);
+   y_r = y.real();
    *c = cosh(y);
-	temp = e_ialpha*sinh(y);
+   temp = e_ialpha*sinh(y_r);
    *s = create_comp(-temp.imag(),temp.real());
 }
 
@@ -192,25 +154,26 @@ __device__ void diag_params(comp* A, int size, int j, comp* t_j) {
    *t_j = sqrt(h_j/g_j); 
 }
 
-// Calculates shear params for all n/2 (i,j) pairs in parallel
-__global__ void shear_params_kernel(comp* A, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
-	int tid = threadIdx.x;
+// Calculates shear and diagonal params for all n/2 (i,j) pairs in parallel
+__global__ void shear_params(comp* A, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
+   int tid = threadIdx.x + blockDim.x * blockIdx.x;
 
-	int i = arr1[tid];
+   int i = arr1[tid];
    int j = arr2[tid];
 
    if(i > j) {
-   	int temp = i;
+      int temp = i;
       i = j;
       j = temp;
    }
 
+   //shear_params(A, size, i, j, &cc[tid], &ss[tid], &tj[i], &tj[j]);
    shear_params(A, size, i, j, &cc[tid], &ss[tid]);
 }
 
 // Calculates unitary params for all n/2 (i,j) pairs in parallel
-__global__ void unitary_params_kernel(comp* A, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
-   int tid = threadIdx.x;
+__global__ void unitary_params(comp* A, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
+   int tid = threadIdx.x + blockDim.x * blockIdx.x;
 
    int i = arr1[tid];
    int j = arr2[tid];
@@ -226,19 +189,21 @@ __global__ void unitary_params_kernel(comp* A, int size, int* arr1, int* arr2, c
 
 // Calculates diag params for all n transformations in parallel
 __global__ void diag_params_kernel(comp* A, int size, comp* tj) {
-	int tid = threadIdx.x;
+   int tid = threadIdx.x + blockDim.x * blockIdx.x;
 
-	diag_params(A, size, tid, &tj[tid]);
+   diag_params(A, size, tid, &tj[tid]);
 }
 
 // Kerenel 1 for shear transformation
 __global__ void jacobi_kernel1_s(comp* A, comp* X, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
 
-   int tid = threadIdx.x;
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
 
    // get i,j pair, all threads in block operate on row i and row j
-   int i = arr1[blockIdx.x];
-   int j = arr2[blockIdx.x];
+   int i = arr1[bid];
+   int j = arr2[bid];
 
    // make sure i < j
    if(i > j) {
@@ -248,8 +213,8 @@ __global__ void jacobi_kernel1_s(comp* A, comp* X, int size, int* arr1, int* arr
    }
 
    // get precaculated values of c and s for current values of i and j
-   comp c = cc[blockIdx.x];
-   comp s = ss[blockIdx.x];
+   comp c = cc[bid];
+   comp s = ss[bid];
 
    // setup rotation matrices
    comp S_T[] = {c, s, -create_comp(-s.real(),s.imag()), c};
@@ -266,11 +231,13 @@ __global__ void jacobi_kernel1_s(comp* A, comp* X, int size, int* arr1, int* arr
 // Kernel 1 for unitary transformation
 __global__ void jacobi_kernel1_u(comp* A, comp* X, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
 
-   int tid = threadIdx.x;
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
 
    // get i,j pair, all threads in block operate on row i and row j
-   int i = arr1[blockIdx.x];
-   int j = arr2[blockIdx.x];
+   int i = arr1[bid];
+   int j = arr2[bid];
 
    // make sure i < j
    if(i > j) {
@@ -280,8 +247,8 @@ __global__ void jacobi_kernel1_u(comp* A, comp* X, int size, int* arr1, int* arr
    }
 
    // get precaculated values of c and s for current values of i and j
-   comp c = cc[blockIdx.x];
-   comp s = ss[blockIdx.x];
+   comp c = cc[bid];
+   comp s = ss[bid];
 
    // setup rotation matrices
    comp U_T[] = {c, s, create_comp(-s.real(),s.imag()), c};
@@ -298,13 +265,15 @@ __global__ void jacobi_kernel1_u(comp* A, comp* X, int size, int* arr1, int* arr
 // Kernel 1 for diagonal transformation
 __global__ void jacobi_kernel1_d(comp* A, comp* X, int size, comp* tt) {
 
-   int tid = threadIdx.x;
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
 
    // all threads in block operate on row j
-   int j = blockIdx.x;
+   int j = bid;
 
    // get precaculated values of t_j for current value j
-   comp tj = tt[blockIdx.x];
+   comp tj = tt[bid];
 
    // get row j element for current thread
    comp row_j = A[j*size+tid];
@@ -316,11 +285,13 @@ __global__ void jacobi_kernel1_d(comp* A, comp* X, int size, comp* tt) {
 // Kernel 2 for shear transformation
 __global__ void jacobi_kernel2_s(comp* A, comp* E, comp* X, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
 
-   int tid = threadIdx.x;
-
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
+ 
    // get i,j pair, all threads in block operate on col i and col j
-   int i = arr1[blockIdx.x];
-   int j = arr2[blockIdx.x];
+   int i = arr1[bid];
+   int j = arr2[bid];
 
    // make sure i < j
    if(i > j) {
@@ -330,11 +301,11 @@ __global__ void jacobi_kernel2_s(comp* A, comp* E, comp* X, int size, int* arr1,
    }
 
    // get precaculated values of c and s for current values of i and j
-   comp c = cc[blockIdx.x];
-   comp s = ss[blockIdx.x];
+   comp c = cc[bid];
+   comp s = ss[bid];
 
    // setup rotation matrices
-	comp S[] = {c, -s, create_comp(-s.real(), s.imag()), c};
+   comp S[] = {c, -s, create_comp(-s.real(), s.imag()), c};
 
    // get col i and col j elements of X2 for current thread
    comp x_col_i = X[i*size+tid];
@@ -356,11 +327,13 @@ __global__ void jacobi_kernel2_s(comp* A, comp* E, comp* X, int size, int* arr1,
 // Kernel 2 for unitary transformation
 __global__ void jacobi_kernel2_u(comp* A, comp* E, comp* X, int size, int* arr1, int* arr2, comp* cc, comp* ss) {
 
-   int tid = threadIdx.x;
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
 
    // get i,j pair, all threads in block operate on col i and col j
-   int i = arr1[blockIdx.x];
-   int j = arr2[blockIdx.x];
+   int i = arr1[bid];
+   int j = arr2[bid];
 
    // make sure i < j
    if(i > j) {
@@ -370,8 +343,8 @@ __global__ void jacobi_kernel2_u(comp* A, comp* E, comp* X, int size, int* arr1,
    }
 
    // get precaculated values of c and s for current values of i and j
-   comp c = cc[blockIdx.x];
-   comp s = ss[blockIdx.x];
+   comp c = cc[bid];
+   comp s = ss[bid];
 
    // setup rotation matrices
    comp U[] = {c, -s, -create_comp(-s.real(),s.imag()), c};
@@ -396,35 +369,37 @@ __global__ void jacobi_kernel2_u(comp* A, comp* E, comp* X, int size, int* arr1,
 // Kernel 2 for diagonal transformation
 __global__ void jacobi_kernel2_d(comp* A, comp* E, comp* X, int size, comp* tt) {
 
-   int tid = threadIdx.x;
+   int t = threadIdx.x + blockDim.x * blockIdx.x;
+   int bid = t / size;
+   int tid = t % size;
 
    // all threads in block operate on row j
-   int j = blockIdx.x;
+   int j = bid;
 
    // get precaculated values of t_j for current values of j
-   comp tj = tt[blockIdx.x];
+   comp tj = tt[bid];
 
-	// get col j elements of X for current thread
-	comp x_col_j = X[j*size+tid];
-	
+   // get col j elements of X for current thread
+   comp x_col_j = X[j*size+tid];
+
    // calculate X = S' * A, X is column major array
    A[j*size+tid] = x_col_j * tj;
 
-	// get col j element of E for current thread
-	comp e_col_j = E[j*size+tid];
-	
-	// calculate E = E * tj
-	E[j*size+tid] = e_col_j * tj;
+   // get col j element of E for current thread
+   comp e_col_j = E[j*size+tid];
+
+   // calculate E = E * tj
+   E[j*size+tid] = e_col_j * tj;
 }
 
 // Jacobi method
-void jacobi(comp* A, comp* E, int size, double epsilon) {
+void jacobi(comp* A_d, comp* E_d, int size, double epsilon) {
 
    // initialize E
-   eye(E, size);
+   eye(E_d, size);
 
    // device memory pointers for matrices
-   comp *A_d, *E_d, *X_d; // E and X are column major arrays
+   comp *X_d; // E and X  column major arrays
 
    // chess tournament ordering arr1 stores i, arr2 stroes j
    int *arr1, *arr2;
@@ -440,104 +415,64 @@ void jacobi(comp* A, comp* E, int size, double epsilon) {
    cudaMallocManaged(&cc, sizeof(comp) * size/2);
    cudaMallocManaged(&ss, sizeof(comp) * size/2);
    cudaMallocManaged(&tj, sizeof(comp) * size);
-   cudaMallocManaged(&A_d, sizeof(comp) * size*size);
 
    // allocate device memory
-   cudaMalloc((void **) &E_d, sizeof(comp) * size*size);
    cudaMalloc((void **) &X_d, sizeof(comp) * size*size);
 
-   // copy matrices to device
-   copy(A,A_d,size);
-   cudaMemcpy(E_d, E, sizeof(comp) * size*size, cudaMemcpyHostToDevice);
-
-	double cond = (size*size/2) * eps;
+   double cond = (size*size/2) * eps;
    int sweep_count = 0;
    double lowerA;
-   
-	// do sweeps
-   while(((lowerA = lower(A_d,size)) > cond) && (sweep_count < num_sweeps)) {
+ 
+   // kernel launch params
+   const int MAX_BLOCKSIZE = 1024;
+   const int BLOCKSIZE = (size > MAX_BLOCKSIZE)? MAX_BLOCKSIZE: size;
+   const int BLOCKSIZE2 = (size/2 > MAX_BLOCKSIZE)? MAX_BLOCKSIZE: size/2;
+   const int GRIDSIZE0 = (size/2 > MAX_BLOCKSIZE)? (size/2)/BLOCKSIZE2: 1;
+   const int GRIDSIZE1 = (size*size/2)/BLOCKSIZE;
+   const int GRIDSIZE2 = (size*size)/BLOCKSIZE;
 
+   // do sweeps
+   while(((lowerA = lower(A_d,size)) > cond) && (sweep_count < num_sweeps)) {
       sweep_count++;
-      printf("Doing sweep #%d  lower(A) = %.15lf \n", sweep_count, lowerA);
 
       // initialize ordering of i,j pairs
       chess_initialize(arr1, arr2, size/2);
-
+      //diag_params_kernel<<<1,size>>>(A_d,size,tj);
       for(int h = 0; h < size-1; h++) {
-         // precalcuate parameters for shear transformations
-         // so that both kernels use the same rotation matrix
-			shear_params_kernel<<<1,size/2>>>(A_d, size, arr1, arr2, cc, ss);
+         shear_params<<<GRIDSIZE0,BLOCKSIZE2>>>(A_d,size,arr1,arr2,cc,ss);
+         jacobi_kernel1_s<<<GRIDSIZE1,BLOCKSIZE>>>(A_d,X_d,size,arr1,arr2,cc,ss);
+         jacobi_kernel2_s<<<GRIDSIZE1,BLOCKSIZE>>>(A_d,E_d,X_d,size,arr1,arr2,cc,ss);
 
-         cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-
-			// launch kernel 1 - shear
-         jacobi_kernel1_s<<<size/2,size>>>(A_d, X_d, size, arr1, arr2, cc, ss);
+         unitary_params<<<GRIDSIZE0,BLOCKSIZE2>>>(A_d,size,arr1,arr2,cc,ss);
+         jacobi_kernel1_u<<<GRIDSIZE1,BLOCKSIZE>>>(A_d,X_d,size,arr1,arr2,cc,ss);
+         jacobi_kernel2_u<<<GRIDSIZE1,BLOCKSIZE>>>(A_d,E_d,X_d,size,arr1,arr2,cc,ss);
 
          // synchronize
          cudaStatus = cudaDeviceSynchronize();
          HANDLE_ERROR(cudaStatus);
 
-         // launch kernel 2 - shear
-         jacobi_kernel2_s<<<size/2,size>>>(A_d, E_d, X_d, size, arr1, arr2, cc, ss);
-
-			cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-
-			// precalculate parameters for unitary transformations
-			unitary_params_kernel<<<1,size/2>>>(A_d, size, arr1, arr2, cc, ss);
-
-         cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-
-			// launch kernel 1 - unitary
-         jacobi_kernel1_u<<<size/2,size>>>(A_d, X_d, size, arr1, arr2, cc, ss);
-
-         // synchronize
-         cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-
-         // launch kernel 2 - unitary
-         jacobi_kernel2_u<<<size/2,size>>>(A_d, E_d, X_d, size, arr1, arr2, cc, ss);
-
-         // synchronize
-         cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-			
-			// precacluate parameters for diagonal transformations
-			diag_params_kernel<<<1,size>>>(A_d, size, tj);
-			
-			cudaStatus = cudaDeviceSynchronize();
-         HANDLE_ERROR(cudaStatus);
-
-			// launch kernel 1 - diagonal
-			jacobi_kernel1_d<<<size,size>>>(A_d, X_d, size, tj);
-
-			// synchronize
-			cudaStatus = cudaDeviceSynchronize();
-			HANDLE_ERROR(cudaStatus);
-
-			// launch kernel 2 - diagonal
-			jacobi_kernel2_d<<<size,size>>>(A_d, E_d, X_d, size, tj);
-
-			// synchronize
-			cudaStatus = cudaDeviceSynchronize();	
-			HANDLE_ERROR(cudaStatus);
-		
          // do next permutation of i, j pairs
          chess_permute(arr1, arr2, size/2);
       }
 
+      diag_params_kernel<<<size/BLOCKSIZE,BLOCKSIZE>>>(A_d,size,tj);
+      jacobi_kernel1_d<<<GRIDSIZE2,BLOCKSIZE>>>(A_d,X_d,size,tj);
+      jacobi_kernel2_d<<<GRIDSIZE2,BLOCKSIZE>>>(A_d, E_d,X_d,size,tj);
+
+      // synchronize
+      cudaStatus = cudaDeviceSynchronize();
+      HANDLE_ERROR(cudaStatus);
+
+      printf("Done sweep #%d  lower(A) = %.15lf \n", sweep_count, lowerA);
+
       if(debug) {
-         printf("One sweep done. New matrix D: \n");
+         printf("One sweep done. New matrix A: \n");
          print(A_d, size);
+         printf("\n New matrix E: \n");
+         print(E_d,size);
          printf("\n");
       }
    }
-
-   // copy to host
-   copy(A_d,A,size);
-   cudaMemcpy(E, E_d, sizeof(comp) * size*size, cudaMemcpyDeviceToHost);
 
    // free memory
    cudaFree(arr1);
@@ -545,8 +480,6 @@ void jacobi(comp* A, comp* E, int size, double epsilon) {
    cudaFree(cc);
    cudaFree(ss);
    cudaFree(tj);
-   cudaFree(A_d);
-   cudaFree(E_d);
    cudaFree(X_d);
 }
 
@@ -555,7 +488,7 @@ int main(int argc, char** argv) {
 
    // process command line arguments
    int r;
-	int size = 0;
+   int size = 0;
    while ((r = getopt(argc, argv, "dpN:s:")) != -1) {
       switch(r)
       {
@@ -568,9 +501,9 @@ int main(int argc, char** argv) {
          case 'N':
             size = atoi(optarg);
             break;
-			case 's':
-				num_sweeps = atoi(optarg);
-				break;
+         case 's':
+            num_sweeps = atoi(optarg);
+            break;
          default:
             exit(1);
       }
@@ -582,14 +515,17 @@ int main(int argc, char** argv) {
    }
 
    // initialize arrays
-   comp* A = (comp*) malloc(sizeof(comp) * size * size);
-   comp* E = (comp*) malloc(sizeof(comp) * size * size);
+   comp *A, *A_d, *E;
+   cudaMallocManaged(&A, sizeof(comp) * size*size);
+   cudaMallocManaged(&A_d, sizeof(comp) * size*size);
+   cudaMallocManaged(&E, sizeof(comp) * size*size);
 
    // array to store eigenvalues
    comp* ei = (comp*) malloc(sizeof(comp) * size);
 
    // create a random matrix
    create_mat(A, size);
+   copy(A,A_d,size);
 
    if(debug) {
       printf("Input matrix A: \n");
@@ -603,34 +539,37 @@ int main(int argc, char** argv) {
    begin = clock();
 
    // call facobi method
-   jacobi(A, E, size, eps);
+   jacobi(A_d, E, size, eps);
 
    end = clock();
    time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
-   get_diagonals(ei, A, size);
+   remove_nondiag(A_d,size);
+   get_diagonals(ei, A_d, size);
    qsort(ei, size, sizeof(comp), compare);
+
+   //comvert E to row major
+   cm_to_rm(E, size);
 
    // output results
    if(output) {
       printf("\n");
       printf("Eigenvalues:\n");
       for(int i = 0; i < size; i++) {
-         printf("%+.4f%+.4f\n", ei[i].real(), ei[i].imag());
+         printf("%+.4f%+.4fi\n", ei[i].real(), ei[i].imag());
       }
       printf("\n");
       //printf("Eigenvectors:\n");
-      //print_cm(E, size);
+      //print(E, size);
       //printf("\n");
    }
-
-   printf("Execution time: %lf\n", time_spent);
+   //printf("Residual: %.25lf\n", residual(A,E,A_d,size));
+   printf("Execution time: %lf\n\n", time_spent);
 
    // clean up
-   free(A);
-   free(E);
+   cudaFree(A);
+   cudaFree(A_d);
+   cudaFree(E);
    free(ei);
 
    return 0;
 }
-
